@@ -1,4 +1,5 @@
 import sqlite3
+import requests
 
 DATABASE_FILE = 'msbwtData.sqlite'
 
@@ -208,17 +209,63 @@ def insertDataset(name, group, url=None, local=None):
 
 def insertHost(url):
 
-    conn = getConnection():
+    conn = getConnection()
     c = conn.cursor()
 
     if url == "":
         raise ValueError("Invalid URL")
 
     try:
-        c.execute("INSERT INTO hosts(url) VALUES(?,)", (?,))
+        c.execute("INSERT INTO hosts(url) VALUES(?,)", (url,))
         hst = selectHost(url=url)[0]
         conn.commit()
         return hst[0]
     except Exception as e:
         print(e)
         return -1
+
+def updateHost(idn=None, url=None):
+    baseQuery = "SELECT id, url FROM hosts WHERE"
+    if id is None and url is None:
+        raise ValueError("Must provide a non empty argument")
+    args = {
+         'id':idn,
+         'url':url
+    }
+
+    first = True
+    for key, value in args.items():
+        if value is not None:
+            if not first:
+                baseQuery += " AND"
+            first = False
+            baseQuery += " {} = {}".format(key, value)
+
+    conn = getConnection()
+    c = conn.cursor()
+    try:
+        c.execute(baseQuery)
+        host = c.fetchone()
+    except Exception as e:
+        raise ValueError("Unable to retrieve host information: {}".format(e))
+
+    try:
+        r = requests.get(host[1] + '/checkAlive')
+        if r.status_code == 200:
+            rjs = r.json()
+    except Exception as e:
+        raise ValueError("Found host failed to return proper response: {}".format(e))
+
+    ret = {}
+    for dataset in rjs:
+        try:
+            c.execute("SELECT id FROM datasets WHERE name = ?", (dataset,))
+            dtaid = c.fetchone()[0]
+            c.execute("INSERT into dataset_hosts(data_id, host_id) VALUES(?,?)", (dtaid, host[0]))
+            c.commit()
+            ret[dataset] = True
+        except Exception as e:
+            ret[dataset] = False
+
+    return ret
+
