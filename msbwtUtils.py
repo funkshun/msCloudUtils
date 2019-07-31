@@ -3,8 +3,9 @@ import glob
 import sqlite3
 from collections import defaultdict
 from msSharedUtil import (dirLabels, MSBWTdirs, uniformLengths)
-from msbwtCloudUtils import *
+from msCloudUtils.msbwtCloudUtils import *
 from MUSCython import MultiStringBWTCython as MSBWT
+from datetime import datetime as dt
 
 LEGACY = True
 
@@ -25,26 +26,27 @@ if LEGACY:
     remoteMSBWT, remoteUrls, remoteLengths = loadMeta('msbwt.meta')
 
 def loadBWT(name, forceLocal=False):
+    logIt("Loading %s...\n" % name)
 
     if not forceLocal:
         try:
+            logIt("Trying remote source...\n")
             remoteSource = findRemote(name)
-            return CloudBWT(name, remoteSource)
+            return CloudBwt(name, remoteSource)
         except Exception as e:
-            print(e)
-
+            logIt(" Failed\n" + e.message)
+            pass
     try:
         localSource = findLocal(name)
         return MSBWT.loadBWT(localSource)
     except Exception as e:
-        print(e)
         return None
 
 
 def findLocal(name):
 
     for di in MSBWTdirs:
-        avail = sorted(glob.glob(%s/*/))
+        avail = sorted(glob.glob('%s/*/' % di))
         for poss in avail:
             if poss.strip().split('/')[-2] == name:
                 return poss
@@ -58,4 +60,10 @@ def findRemote(name):
     except Exception as e:
         raise ValueError("No remote url available for {}".format(name))
 
-
+def logIt(string):
+    logfile = 'msbwtCloud.log'
+    
+    with open(logfile, 'a') as f:
+        dtstring = dt.strftime(dt.now(), "%Y/%m/%d %H:%M:%S")
+        logString = "[" + dtstring + "] " + string
+        f.write(string)

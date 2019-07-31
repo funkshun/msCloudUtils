@@ -20,7 +20,7 @@ class CloudBwt():
 
     def countOccurrencesOfSeq(self, seq, givenRange=None):
         para = {
-            "args": [seq]
+            "args": str([seq])
         }
         if givenRange is not None:
             para["givenRange"] = givenRange
@@ -29,7 +29,7 @@ class CloudBwt():
 
     def findIndicesOfStr(self, seq, givenRange=None):
         para = {
-            "args": [seq]
+            "args": str([seq])
         }
         if givenRange is not None:
             para["givenRange"] = givenRange
@@ -38,48 +38,59 @@ class CloudBwt():
 
     def getBWTRange(self, start, end):
         para = {
-            "args": [start, end]
+            "args": str([start, end])
         }
         res = requests.get(self.host + "/"+ self.name + "/" + "getBWTRange", params=para)
         return res.json()['result']
 
     def getCharAtIndex(self, index):
         para = {
-            "args": [index]
+            "args": str([index])
         }
         res = requests.get(self.host + "/"+ self.name + "/" + "getCharAtIndex", params=para)
         return res.json()['result']
 
     def getFullFMAtIndex(self, index):
         para = {
-            "args": [index]
+            "args": str([index])
         }
         res = requests.get(self.host + "/"+ self.name + "/" + "getFullFMAtIndex", params=para)
         return res.json()['result']
 
     def getOccurrenceOfCharAtIndex(self, sym, index):
         para = {
-            "args": [sym, index]
+            "args": str([sym, index])
         }
         res = requests.get(self.host + "/"+ self.name + "/" + "getOccurrenceOfCharAtIndex", params=para)
         return res.json()['result']
 
     def getSequenceDollarID(self, strIndex, returnOffset=False):
         para = {
-            "args": [strIndex],
-            "returnOffset": returnOffset
+            "args": str([strIndex]),
+            "returnOffset": str(returnOffset)
         }
         res = requests.get(self.host + "/"+ self.name + "/" + "getSequenceDollarID", params = para)
         return res.json()['result']
 
     def getTotalSize(self):
-        res = requests.get(self.host + "/"+ self.name + "/" + "getTotalSize")
+        para = {
+                "args": str([])
+        }
+        res = requests.get(self.host + "/"+ self.name + "/" + "getTotalSize", params=para)
         return res.json()['result']
 
     def recoverString(self, strIndex, withIndex=False):
         para = {
-            "args": [strIndex],
-            "withIndex": False
+            "args": str([strIndex]),
         }
         res = requests.get(self.host + "/"+ self.name + "/" + "recoverString", params=para)
         return res.json()['result']
+
+    def getSymbolCount(self, sym):
+        para = {
+                "args": str([sym])
+        }
+        res = requests.get(self.host + "/"+ self.name + "/" + "getSymbolCount", params=para)
+        return res.json()['result']
+def st(xs):
+    pass
