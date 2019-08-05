@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import datetime as dt
 import requests
 
 DATABASE_FILE = 'msbwtData.sqlite'
@@ -8,13 +9,9 @@ def getConnection():
         conn = sqlite3.connect(DATABASE_FILE)
         return conn
     except Exception as e:
-        print(e)
+        log(e)
         return None
 
-def getAvailable():
-    conn = sqlite3.connect(DATABASE_FILE)
-
-# Creates database file and structure if it doesn't exist
 def createDB():
     
     conn = getConnection()
@@ -41,7 +38,7 @@ def createDB():
     );"""
 
     upHostsRel = """
-    CREATE TABLE IF NOT EXISTS dataset_hosts(
+    CREATE TABLE IF NOT EXISTS remote_source(
     id integer PRIMARY KEY,
     data_id integer,
     host_id integer,
@@ -50,7 +47,7 @@ def createDB():
     );"""
 
     upLocalRel = """
-    CREATE TABLE IF NOT EXISTS dataset_local(
+    CREATE TABLE IF NOT EXISTS local_source(
     id integer PRIMARY KEY,
     data_id integer,
     local_id integer,
@@ -67,7 +64,7 @@ def createDB():
         conn.commit()
         return True
     except Exception as e:
-        print(e)
+        log(e)
         return False
 
 def dropDB():
@@ -76,202 +73,229 @@ def dropDB():
     c = conn.cursor()
 
     try:
-        c.execute("DROP TABLE IF EXISTS dataset_local")
-        c.execute("DROP TABLE IF EXISTS dataset_hosts")
+        c.execute("DROP TABLE IF EXISTS remote_source")
+        c.execute("DROP TABLE IF EXISTS local_source")
         c.execute("DROP TABLE IF EXISTS local")
         c.execute("DROP TABLE IF EXISTS hosts")
         c.execute("DROP TABLE IF EXISTS datasets")
         conn.commit()
         return True
     except Exception as e:
-        print(e)
+        log(e)
         return False
 
-def selectHost(idn=None, url=None):
-
-    baseQuery = """
-    SELECT id, url FROM hosts WHERE
-    """
-    args = {
-        'idn': idn,
-        'url': url
-    }
-
-    first = True
-    for key, value in args.items():
-        if value is not None:
-            if not first:
-                baseQuery += " AND"
-            first = False
-            baseQuery += " {} = {}".format(key, value)
-
+def insertDataset(name, group):
+    
+    if name == "" or group == "":
+        raise ValueError("Name and grouping must both be non-empty")
+    
     conn = getConnection()
     c = conn.cursor()
 
     try:
-        c.execute(baseQuery)
-        return c.fetchall()
+        c.execute("INSERT INTO datasets(name, grouping) VALUES(?,?)", (name, group))
+        conn.commit()
+        return selectDataset(name=name, group=group)[0][0]
     except Exception as e:
-        print(e)
-        return None
+        log(e)
+        return -1
 
-def selectLocal(idn=None, direc=None):
-
-    baseQuery = """
-    SELECT id, direc FROM local WHERE
-    """
-    args = {
-        'idn': idn,
-        'direc':direc
-    }
-
-    first = True
-    for key, value in args.items():
-        if value is not None:
-            if not first:
-                baseQuery += " AND"
-            first = False
-            baseQuery += " {} = {}".format(key, value)
-
+def selectDataset(idn=None, name=None, group=None):
+    
+    para = {}
+    if idn is not None:
+        para["id"] = str(idn)
+    if name is not None:
+        para["name"] = name
+    if group is not None:
+        para["grouping"] = group
+    
     conn = getConnection()
     c = conn.cursor()
 
     try:
-        c.execute(baseQuery)
-        return c.fetchall()
-    except Exception as e:
-        print(e)
-        return None
-
-def selectDataset(idn=None, grouping=None, name=None, host_id=None, local_id=None):
-    baseQuery = """
-    SELECT id, grouping, name, host_id, local_id FROM datasets WHERE
-    """
-    args = {
-        'idn': idn,
-        'grouping': grouping,
-        'name': name,
-        'host_id': host_id,
-        'local_id': local_id
-    }
-
-    first = True
-    for key, value in args.items():
-        if value is not None:
-            if not first:
-                baseQuery += " AND"
-            first = False
-            baseQuery += " {} = {}".format(key, value)
-
-    conn = getConnection()
-    c = conn.cursor()
-
-    try:
-        c.execute(baseQuery)
-        rows = c.fetchall()
+        rows = c.execute(constructSelect("datasets", **para)).fetchall()
         return rows
     except Exception as e:
-        print(e)
+        log(e)
         return None
-
-def insertDataset(name, grouping, url=None, local=None):
-
-    baseQuery = """
-    INSERT INTO datasets(name, grouping) VALUES(?,?)
-    """
-    if name == "" or grouping == "":
-        raise ValueError("Name and grouping must both be non-empty")
-
-    host, localDir = [],[]
-    if url is not None:
-        try:
-            host = selectHost(url=url)[0]
-        except Exception as e:
-            print("Failed to retrieve host. Ensure it exists: " + e)
-            return -1
-
-    if local is not None:
-        try:
-            localDir = selectLocal(direc=local)[0]
-        except Exception as e:
-            print("Failed to retrieve local directory: " + e)
-            return -1
-
-    conn = getConnection()
-    c = conn.cursor()
-
-    try:
-        c.execute(baseQuery, (name, grouping))
-        new_data = selectDataset(name=name, grouping=grouping)[0]
-        if host != []:
-            c.execute("INSERT INTO dataset_hosts(data_id, host_id) VALUES(?,?)", (new_data[0], host[0]))
-        if local != []:
-            c.execute("INSERT INTO dataset_local(data_id, local_id) VALUES(?,?)", (new_data[0], local[0]))
-        conn.commit()
-        return new_data[0]
-    except Exception as e:
-        print(e)
-        return -1
 
 def insertHost(url):
 
+    if url == "":
+        raise ValueError("URL cannot be empty.")
+    
     conn = getConnection()
     c = conn.cursor()
 
-    if url == "":
-        raise ValueError("Invalid URL")
-
     try:
-        c.execute("INSERT INTO hosts(url) VALUES(?,)", (url,))
-        hst = selectHost(url=url)[0]
+        c.execute("INSERT INTO hosts(url) VALUES(?)", (url,))
         conn.commit()
-        return hst[0]
+        return selectHost(url=url)[0][0]
     except Exception as e:
-        print(e)
+        log(e)
         return -1
 
-def updateHost(idn=None, url=None):
-    baseQuery = "SELECT id, url FROM hosts WHERE"
-    if id is None and url is None:
-        raise ValueError("Must provide a non empty argument")
-    args = {
-         'id':idn,
-         'url':url
-    }
-
-    first = True
-    for key, value in args.items():
-        if value is not None:
-            if not first:
-                baseQuery += " AND"
-            first = False
-            baseQuery += " {} = {}".format(key, value)
+def selectHost(idn=None, url=None):
+    
+    para = {}
+    if idn is not None:
+        para["id"] = str(idn)
+    if url is not None:
+        para["url"] = url
 
     conn = getConnection()
     c = conn.cursor()
-    try:
-        c.execute(baseQuery)
-        host = c.fetchone()
-    except Exception as e:
-        raise ValueError("Unable to retrieve host information: {}".format(e))
 
     try:
-        r = requests.get(host[1] + '/checkAlive')
-        if r.status_code == 200:
-            rjs = r.json()
+        rows = c.execute(constructSelect("hosts", **para)).fetchall()
+        return rows
     except Exception as e:
-        raise ValueError("Found host failed to return proper response: {}".format(e))
+        log(e)
+        return None
 
-    ret = {}
-    for dataset in rjs:
-        try:
-            c.execute("SELECT id FROM datasets WHERE name = ?", (dataset,))
-            dtaid = c.fetchone()[0]
-            c.execute("INSERT into dataset_hosts(data_id, host_id) VALUES(?,?)", (dtaid, host[0]))
-            c.commit()
-            ret[dataset] = True
-        except Exception as e:
-            ret[dataset] = False
+def insertDirec(direc, group):
 
-    return ret
+    if direc == "" or group == "":
+        raise ValueError("direc and grouping must be non-empty")
+    
+    conn = getConnection()
+    c = conn.cursor()
 
+    try:
+        c.execute("INSERT INTO local(direc, grouping) VALUES(?,?)", (direc, group))
+        conn.commit()
+        return selectDirec(direc=direc, group=group)
+    except Exception as e:
+        log(e)
+        return -1
+
+def selectDirec(idn=None, direc=None, group=None):
+
+    para = {}
+    if idn is not None:
+        para["id"] = idn
+    else:
+        if direc is not None:
+            para["direc"] = direc
+        if group is not None:
+            para["grouping"] = group
+
+    conn = getConnection()
+    c = conn.cursor()
+
+    try:
+        return c.execute(constructSelect("local", **para)).fetchall()
+    except Exception as e:
+        log(e)
+        return None
+
+def insertRemote(data_id=None, name=None, host_id=None, url=None):
+
+    if (data_id is None and name is None) or (host_id is None and url is None):
+        raise ValueError("Must pass at least one identifier for host and one for dataset")
+
+    if data_id is None:
+        data_id = selectDataset(name=name)[0][0]
+        if data_id is None:
+            raise NameError("Specified dataset name was not found")
+
+    if host_id is None:
+        host_id = selectHost(url=url)
+        if host_id is None:
+            raise NameError("Specified host url was not found")
+
+    conn = getConnection()
+    c = conn.cursor()
+
+    try:
+        c.execute("INSERT INTO remote_source(data_id, host_id) VALUES(?,?)", (data_id, host_id))
+        conn.commit()
+        return selectRemote(data_id=data_id, host_id=host_id)[-1][0]
+    except Exception as e:
+        log(e)
+        return -1
+
+def selectRemote(idn=None, data_id=None, host_id=None):
+
+    if idn is None and  (data_id is None or host_id is None):
+        return ValueError("Must provide either idn or both data_id and host_id")
+    
+    para ={}
+    if idn is not None:
+        para["id"] = idn
+    else:
+        para["data_id"] = data_id
+        para["host_id"] = host_id
+    
+    conn = getConnection()
+    c = conn.cursor()
+
+    try:
+        return c.execute(constructSelect("remote_source", **para)).fetchall()
+    except Exception as e:
+        log(e)
+        return None
+
+def insertLocal(data_id=None, name=None, local_id=None, direc=None):
+
+    if (data_id is None and name is None) or (local_id is None and direc is None):
+        raise ValueError("Must pass at least one identifier for host and one for dataset")
+
+    if data_id is None:
+        data_id = selectDataset(name=name)[0][0]
+        if data_id is None:
+            raise NameError("Specified dataset name was not found")
+
+    if local_id is None:
+        local_id = selectLocal(direc=direc)
+        if local_id is None:
+            raise NameError("Specified local directory was not found")
+
+    conn = getConnection()
+    c = conn.cursor()
+
+    try:
+        c.execute("INSERT INTO local_source(data_id, local_id) VALUES(?,?)", (data_id, local_id))
+        conn.commit()
+        return selectLocal(data_id=data_id, local_id=local_id)[-1][0]
+    except Exception as e:
+        log(e)
+        return -1
+
+def selectLocal(idn=None, data_id=None, local_id=None):
+
+    if idn is None and  (data_id is None or local_id is None):
+        return ValueError("Must provide either idn or both data_id and local_id")
+    
+    para ={}
+    if idn is not None:
+        para["id"] = idn
+    else:
+        para["data_id"] = data_id
+        para["local_id"] = local_id
+    
+    conn = getConnection()
+    c = conn.cursor()
+
+    try:
+        return c.execute(constructSelect("local_source", **para)).fetchall()
+    except Exception as e:
+        log(e)
+        return None
+
+def constructSelect(table, **kwargs):
+    """ Generates SQL for a SELECT statement matching the kwargs passed. """
+    sql = list()
+    sql.append("SELECT * FROM %s " % table)
+    if kwargs:
+        sql.append("WHERE " + " AND ".join("%s = '%s'" % (k, v) for k, v in kwargs.items()))
+    sql.append(";")
+    return "".join(sql)
+
+def log(message):
+    print(timestamp() + " " + str(message))
+
+def timestamp():
+    tm = dt.strftime(dt.now(), "%Y/%m/%d %H:%M:%S")
+    return "[" + tm + "]"
