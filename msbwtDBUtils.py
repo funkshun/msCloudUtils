@@ -16,15 +16,15 @@ def getAvailable():
 
 # Creates database file and structure if it doesn't exist
 def createDB():
+    
     conn = getConnection()
-
     c = conn.cursor()
 
     upDatasets = """
     CREATE TABLE IF NOT EXISTS datasets (
     id integer PRIMARY KEY,
-    group text NOT NULL,
-    name text NOT NULL,
+    grouping text NOT NULL,
+    name text NOT NULL
     );"""
 
     upHosts = """
@@ -37,17 +37,23 @@ def createDB():
     CREATE TABLE IF NOT EXISTS local(
     id integer PRIMARY KEY,
     direc text NOT NULL,
-    group text
+    grouping text NOT NULL
     );"""
 
     upHostsRel = """
     CREATE TABLE IF NOT EXISTS dataset_hosts(
+    id integer PRIMARY KEY,
+    data_id integer,
+    host_id integer,
     FOREIGN KEY (data_id) REFERENCES datasets (id),
     FOREIGN KEY (host_id) REFERENCES hosts (id)
     );"""
 
     upLocalRel = """
     CREATE TABLE IF NOT EXISTS dataset_local(
+    id integer PRIMARY KEY,
+    data_id integer,
+    local_id integer,
     FOREIGN KEY (data_id) REFERENCES datasets (id),
     FOREIGN KEY (local_id) REFERENCES local (id)
     );"""
@@ -137,13 +143,13 @@ def selectLocal(idn=None, direc=None):
         print(e)
         return None
 
-def selectDataset(idn=None, group=None, name=None, host_id=None, local_id=None):
+def selectDataset(idn=None, grouping=None, name=None, host_id=None, local_id=None):
     baseQuery = """
-    SELECT id, group, name, host_id, local_id FROM datasets WHERE
+    SELECT id, grouping, name, host_id, local_id FROM datasets WHERE
     """
     args = {
         'idn': idn,
-        'group': group,
+        'grouping': grouping,
         'name': name,
         'host_id': host_id,
         'local_id': local_id
@@ -168,15 +174,15 @@ def selectDataset(idn=None, group=None, name=None, host_id=None, local_id=None):
         print(e)
         return None
 
-def insertDataset(name, group, url=None, local=None):
+def insertDataset(name, grouping, url=None, local=None):
 
     baseQuery = """
-    INSERT INTO datasets(name, group) VALUES(?,?)
+    INSERT INTO datasets(name, grouping) VALUES(?,?)
     """
-    if name == "" or group == "":
-        raise ValueError("Name and Group must both be non-empty")
+    if name == "" or grouping == "":
+        raise ValueError("Name and grouping must both be non-empty")
 
-    host, localDir = []
+    host, localDir = [],[]
     if url is not None:
         try:
             host = selectHost(url=url)[0]
@@ -195,8 +201,8 @@ def insertDataset(name, group, url=None, local=None):
     c = conn.cursor()
 
     try:
-        c.execute(baseQuery, (name, group))
-        new_data = selectDataset(name=name, group=group)[0]
+        c.execute(baseQuery, (name, grouping))
+        new_data = selectDataset(name=name, grouping=grouping)[0]
         if host != []:
             c.execute("INSERT INTO dataset_hosts(data_id, host_id) VALUES(?,?)", (new_data[0], host[0]))
         if local != []:
