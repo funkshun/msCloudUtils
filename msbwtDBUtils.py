@@ -1,5 +1,6 @@
 import sqlite3
 from datetime import datetime as dt
+from collections import defaultdict
 import requests
 
 DATABASE_FILE = 'msbwtData.sqlite'
@@ -105,16 +106,38 @@ def selectDataset(idn=None, name=None, group=None):
     para = {}
     if idn is not None:
         para["id"] = str(idn)
-    if name is not None:
-        para["name"] = name
-    if group is not None:
-        para["grouping"] = group
+    else:
+        if name is not None:
+            para["name"] = name
+        if group is not None:
+            para["grouping"] = group
     
     conn = getConnection()
     c = conn.cursor()
 
     try:
         rows = c.execute(constructSelect("datasets", **para)).fetchall()
+        return rows
+    except Exception as e:
+        log(e)
+        return None
+
+def deleteDataset(idn=None, name=None, group=None):
+    
+    para = {}
+    if idn is not None:
+        para["id"] = str(idn)
+    else:
+        if name is not None:
+            para["name"] = name
+        if group is not None:
+            para["grouping"] = group
+    
+    conn = getConnection()
+    c = conn.cursor()
+
+    try:
+        rows = c.execute(constructDelete("datasets", **para)).fetchall()
         return rows
     except Exception as e:
         log(e)
@@ -141,7 +164,7 @@ def selectHost(idn=None, url=None):
     para = {}
     if idn is not None:
         para["id"] = str(idn)
-    if url is not None:
+    elif url is not None:
         para["url"] = url
 
     conn = getConnection()
@@ -149,6 +172,24 @@ def selectHost(idn=None, url=None):
 
     try:
         rows = c.execute(constructSelect("hosts", **para)).fetchall()
+        return rows
+    except Exception as e:
+        log(e)
+        return None
+
+def deleteHost(idn=None, url=None):
+    
+    para = {}
+    if idn is not None:
+        para["id"] = str(idn)
+    elif url is not None:
+        para["url"] = url
+
+    conn = getConnection()
+    c = conn.cursor()
+
+    try:
+        rows = c.execute(constructDelete("hosts", **para)).fetchall()
         return rows
     except Exception as e:
         log(e)
@@ -190,6 +231,25 @@ def selectDirec(idn=None, direc=None, group=None):
         log(e)
         return None
 
+def deleteDirec(idn=None, direc=None, group=None):
+    para = {}
+    if idn is not None:
+        para["id"] = idn
+    else:
+        if direc is not None:
+            para["direc"] = direc
+        if group is not None:
+            para["grouping"] = group
+
+    conn = getConnection()
+    c = conn.cursor()
+
+    try:
+        return c.execute(constructDelete("local", **para)).fetchall()
+    except Exception as e:
+        log(e)
+        return None
+
 def insertRemote(data_id=None, name=None, host_id=None, url=None):
 
     if (data_id is None and name is None) or (host_id is None and url is None):
@@ -217,22 +277,41 @@ def insertRemote(data_id=None, name=None, host_id=None, url=None):
         return -1
 
 def selectRemote(idn=None, data_id=None, host_id=None):
-
-    if idn is None and  (data_id is None or host_id is None):
-        return ValueError("Must provide either idn or both data_id and host_id")
     
     para ={}
     if idn is not None:
         para["id"] = idn
     else:
-        para["data_id"] = data_id
-        para["host_id"] = host_id
+        if data_id is not None:
+            para["data_id"] = data_id
+        if host_id is not None:
+            para["host_id"] = host_id
     
     conn = getConnection()
     c = conn.cursor()
 
     try:
         return c.execute(constructSelect("remote_source", **para)).fetchall()
+    except Exception as e:
+        log(e)
+        return None
+
+def deleteRemote(idn=None, data_id=None, host_id=None):
+    
+    para ={}
+    if idn is not None:
+        para["id"] = idn
+    else:
+        if data_id is not None:
+            para["data_id"] = data_id
+        if host_id is not None:
+            para["host_id"] = host_id
+    
+    conn = getConnection()
+    c = conn.cursor()
+
+    try:
+        return c.execute(constructDelete("remote_source", **para)).fetchall()
     except Exception as e:
         log(e)
         return None
@@ -264,16 +343,15 @@ def insertLocal(data_id=None, name=None, local_id=None, direc=None):
         return -1
 
 def selectLocal(idn=None, data_id=None, local_id=None):
-
-    if idn is None and  (data_id is None or local_id is None):
-        return ValueError("Must provide either idn or both data_id and local_id")
     
     para ={}
     if idn is not None:
         para["id"] = idn
     else:
-        para["data_id"] = data_id
-        para["local_id"] = local_id
+        if data_id is not None:
+            para["data_id"] = data_id
+        if local_id is not None:
+            para["local_id"] = local_id
     
     conn = getConnection()
     c = conn.cursor()
@@ -284,10 +362,71 @@ def selectLocal(idn=None, data_id=None, local_id=None):
         log(e)
         return None
 
+def deleteLocal(idn=None, data_id=None, local_id=None):
+    
+    para ={}
+    if idn is not None:
+        para["id"] = idn
+    else:
+        if data_id is not None:
+            para["data_id"] = data_id
+        if local_id is not None:
+            para["local_id"] = local_id
+    
+    conn = getConnection()
+    c = conn.cursor()
+
+    try:
+        return c.execute(constructDelete("local_source", **para)).fetchall()
+    except Exception as e:
+        log(e)
+        return None
+
+def getAvailable():
+    available = defaultdict(list)
+    datasets = selectDataset()
+    for dataset in datasets:
+        if len(selectRemote(data_id=dataset[0])) > 0:
+            available[dataset[1]].append((dataset[2], True))
+        else:
+            available[dataset[1]].append((dataset[2], False))
+    return available
+
+def updateRemote():
+    
+    hosts = selectHost()
+    for host in hosts:
+        url = host[1]
+        try:
+            res = requests.get(url + '/checkAlive')
+            datasets = res.json()
+        except Exception as e:
+            log(e)
+            continue
+        
+        newRels = []
+        for dataset in datasets:
+            rows = selectDataset(name=dataset)
+            if len(rows) != 1 or rows is None:
+                continue
+            newRels.append((rows[0][0], host[0]))
+                    
+def updateLocal():
+    pass
+
 def constructSelect(table, **kwargs):
     """ Generates SQL for a SELECT statement matching the kwargs passed. """
     sql = list()
     sql.append("SELECT * FROM %s " % table)
+    if kwargs:
+        sql.append("WHERE " + " AND ".join("%s = '%s'" % (k, v) for k, v in kwargs.items()))
+    sql.append(";")
+    return "".join(sql)
+
+def constructDelete(table, **kwargs):
+    """ Generates SQL for a SELECT statement matching the kwargs passed. """
+    sql = list()
+    sql.append("DELETE FROM %s " % table)
     if kwargs:
         sql.append("WHERE " + " AND ".join("%s = '%s'" % (k, v) for k, v in kwargs.items()))
     sql.append(";")
